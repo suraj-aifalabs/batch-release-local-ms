@@ -4,9 +4,12 @@ const pkg = require("pdf-to-printer");
 const fs = require("fs");
 const path = require("path");
 const template = path.join(__dirname, "../../assets/TV-FRM-58719.pdf");
-const { PDFDocument, StandardFonts } = require("pdf-lib");
+const unsigned = path.join(__dirname, "../../assets/TV-FRM-58719 (1).pdf");
+const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const Tick_Image = path.join(__dirname, "../../assets/Tick_Image.png");
+const forge = require("node-forge");
 
+const os = require("os");
 exports.healthCheck = catchAsyncError(async (req, res) => {
     const estDate = new Date().toLocaleString("en-US", {
         timeZone: "America/New_York",
@@ -51,10 +54,103 @@ exports.serverCheck = catchAsyncError(async (req, res) => {
     });
 });
 
+async function createEmployeeDigitalSignature(employeeInfo, inputPdfPath, outputPdfPath) {
+    const keys = forge.pki.rsa.generateKeyPair(2048);
+
+    const cert = createEmployeeCertificate(keys, employeeInfo);
+
+    const pdfBytes = fs.readFileSync(inputPdfPath);
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+
+    const page = pdfDoc.getPages()[0];
+    const { width, height } = page.getSize();
+    const signingTime = new Date();
+
+    page.drawText(`Digitally signed by: ${employeeInfo.name} (${employeeInfo.empId})`, {
+        x: 350,
+        y: height - 678,
+        size: 10,
+        color: rgb(0, 0, 0)
+    });
+
+    page.drawText(`Email: ${employeeInfo.email}`, {
+        x: 350,
+        y: height - 688,
+        size: 10,
+        color: rgb(0, 0, 0)
+    });
+
+    page.drawText(`Date: ${signingTime.toLocaleString()}`, {
+        x: 350,
+        y: height - 698,
+        size: 10,
+        color: rgb(0, 0, 0)
+    });
+
+    const signedPdfBytes = await pdfDoc.save();
+    fs.writeFileSync(outputPdfPath, signedPdfBytes);
+
+    const signatureMetadata = {
+        signerName: employeeInfo.name,
+        signerEmail: employeeInfo.email,
+        signerEmpId: employeeInfo.empId,
+        signedAt: signingTime.toISOString(),
+        certificate: forge.pki.certificateToPem(cert),
+        privateKey: forge.pki.privateKeyToPem(keys.privateKey)
+    };
+
+    return {
+        certificate: forge.pki.certificateToPem(cert),
+        privateKey: forge.pki.privateKeyToPem(keys.privateKey),
+        signedPdfPath: outputPdfPath,
+        signatureMetadata
+    };
+}
+
+
+
+function createEmployeeCertificate(keys, employeeInfo) {
+    const cert = forge.pki.createCertificate();
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = String(employeeInfo.empId); // Ensure string
+    cert.validity.notBefore = new Date();
+    cert.validity.notAfter = new Date();
+    cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
+
+    const attrs = [
+        { name: "commonName", value: employeeInfo.name },
+        { name: "emailAddress", value: employeeInfo.email },
+        { name: "organizationName", value: "Company Name" },
+        { name: "organizationalUnitName", value: `Employee ID: ${employeeInfo.empId}` }
+    ];
+
+    cert.setSubject(attrs);
+    cert.setIssuer(attrs);
+
+    cert.setExtensions([{
+        name: "basicConstraints",
+        cA: false
+    }, {
+        name: "keyUsage",
+        digitalSignature: true,
+        nonRepudiation: true
+    }, {
+        name: "subjectAltName",
+        altNames: [{
+            type: 1,
+            value: employeeInfo.email
+        }]
+    }]);
+
+    cert.sign(keys.privateKey, forge.md.sha256.create());
+    return cert;
+}
+
+
 exports.getPDF = catchAsyncError(async (req, res) => {
     try {
         const { username, email, exception } = req.body;
-        const existingPdfBytes = await fs.promises.readFile(template);
+        const existingPdfBytes = await fs.promises.readFile(unsigned);
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const pages = pdfDoc.getPages();
@@ -105,7 +201,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
             { key: "country", x: 210, y: 450 },
             { key: "exception", x: 419, y: 647 },
             { key: "username", x: 260, y: 680 },
-            { key: "signedAt", x: 350, y: 690 },
+            //{ key: "signedAt", x: 350, y: 690 },
             { key: "signedBy", x: 350, y: 680 }
         ];
         points.forEach(({ key, x, y }) => {
@@ -141,39 +237,17 @@ exports.getPDF = catchAsyncError(async (req, res) => {
             }
             else if (key === "signedBy") {
                 if (username) {
-                    text = "Digitally signed by " + username;
-                    firstPage.drawText(text, {
-                        x,
-                        y: height - y,
-                        size: 8,
-                        font,
-                    });
+                    //createEmployeeDigitalSignature({ email: "temp@aifalabs.com", name: "temp", empId: 101 }, template, template)
+                    // text = "Digitally signed by " + username;
+                    // firstPage.drawText(text, {
+                    //     x,
+                    //     y: height - y,
+                    //     size: 8,
+                    //     font,
+                    // });
                 }
             }
-            else if (key === "signedAt") {
-                if (username) {
-                    const date = new Date();
 
-                    const day = String(date.getDate()).padStart(2, "0");
-                    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                    const month = monthNames[date.getMonth()];
-                    const year = date.getFullYear();
-
-                    const options = { timeZoneName: "short" };
-                    const timeString = date.toLocaleTimeString("en-US", options);
-                    const timeZoneAbbr = timeString.split(" ").pop().replace(/[^A-Z]/g, "");
-
-                    const text = `${day} ${month} ${year} (${timeZoneAbbr})`;
-
-                    firstPage.drawText(text, {
-                        x,
-                        y: height - y,
-                        size: 8,
-                        font,
-                    });
-                }
-            }
 
             else {
                 const value = data[key];
@@ -206,12 +280,40 @@ exports.getPDF = catchAsyncError(async (req, res) => {
             }
         });
 
-        const pdfBytes = await pdfDoc.save();
+        const unsignedPath = path.join(os.tmpdir(), `unsigned-${Date.now()}.pdf`);
+        const signedPath = path.join(os.tmpdir(), `signed-${Date.now()}.pdf`);
+        const unsignedPdfBytes = await pdfDoc.save();
+        await fs.promises.writeFile(unsignedPath, unsignedPdfBytes);
+
+        let finalPdfBytes;
+
+        if (username) {
+
+            await createEmployeeDigitalSignature(
+                {
+                    email: email || "temp@aifalabs.com",
+                    name: username,
+                    empId: String(Date.now())
+                },
+                unsignedPath,
+                signedPath
+            );
+            finalPdfBytes = await fs.promises.readFile(signedPath);
+        } else {
+            finalPdfBytes = await fs.promises.readFile(unsignedPath);
+        }
+
         res.setHeader("Content-Type", "application/pdf");
-        res.send(Buffer.from(pdfBytes));
+        res.send(Buffer.from(finalPdfBytes));
+
+        fs.unlink(unsignedPath, () => { });
+        fs.unlink(signedPath, () => { });
+
+
     }
     catch (err) {
         console.error(err.message);
         res.status(500).json({ error: err.message });
     }
 });
+
