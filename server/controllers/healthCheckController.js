@@ -1,6 +1,5 @@
 /* eslint-disable no-undef */
 const catchAsyncError = require("../middlewares/catchAsyncError");
-const pkg = require("pdf-to-printer");
 const fs = require("fs");
 const path = require("path");
 const template = path.join(__dirname, "../../assets/TV-FRM-58719.pdf");
@@ -19,7 +18,6 @@ exports.healthCheck = catchAsyncError(async (req, res) => {
         uptime: (process?.uptime() ?? 0) + " sec",
     });
 });
-
 
 exports.readyCheck = catchAsyncError(async (req, res) => {
     const estDate = new Date().toLocaleString("en-US", {
@@ -189,7 +187,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                         firstPage.drawText(text, {
                             x,
                             y: height - y,
-                            size: 7,
+                            size: 10,
                             font,
                         });
                     }
@@ -198,7 +196,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                         firstPage.drawText(text, {
                             x,
                             y: height - y,
-                            size: 7,
+                            size: 10,
                             font,
                         });
                     }
