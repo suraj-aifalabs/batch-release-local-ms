@@ -180,6 +180,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
         res.send(Buffer.from(pdfBytes));
     }
     catch (err) {
+        // eslint-disable-next-line no-console
         console.error(err.message);
         res.status(500).json({ error: err.message });
     }
