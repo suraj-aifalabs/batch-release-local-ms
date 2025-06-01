@@ -6,6 +6,7 @@ const { default: helmet } = require("helmet");
 const bodyParser = require("body-parser");
 const authRoutes = require("./routes/authRoutes");
 const healthRoutes = require("./routes/healthRoutes");
+const batchRoutes = require("./routes/batchRoutes");
 const { dbConnection } = require("./config/db");
 const ErrorHandler = require("./middlewares/ErrorHandler");
 dotenv.config();
@@ -34,9 +35,9 @@ app.use(cors(corsOptions));
 
 // routes
 app.use("/api/auth", middlewares.validateOauthToken, authRoutes);
+app.use("/", batchRoutes);
 
 app.use("/", healthRoutes);
-
 // eslint-disable-next-line no-undef
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
