@@ -14,7 +14,6 @@ exports.healthCheck = catchAsyncError(async (req, res) => {
     });
 });
 
-
 exports.readyCheck = catchAsyncError(async (req, res) => {
     const estDate = new Date().toLocaleString("en-US", {
         timeZone: "America/New_York",
