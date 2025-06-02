@@ -20,9 +20,9 @@ jest.mock("pdf-lib", () => ({
     }
 }));
 
-jest.mock("../server/middlewares/catchAsyncError", () => (fn) => fn);
+jest.mock("../../server/middlewares/catchAsyncError", () => (fn) => fn);
 
-const { getPDF } = require("../server/controllers/batchController");
+const { getPDF } = require("../../server/controllers/batchController");
 
 describe("getPDF Controller Tests", () => {
     let app;
