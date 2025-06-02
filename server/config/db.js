@@ -15,11 +15,11 @@ const dbConnection = async () => {
                 dialectOptions: {
                     ssl: {
                         require: true,
-                        rejectUnauthorized: false // For self-signed certificates if needed
+                        rejectUnauthorized: false
                     }
                 },
                 // eslint-disable-next-line no-console
-                logging: process.env.NODE_ENV === "development" ? console.log : false,
+                logging: process.env.NODE_ENV === "DEVELOPMENT" ? console.log : false,
                 pool: {
                     max: 5,
                     min: 0,
@@ -34,12 +34,17 @@ const dbConnection = async () => {
         db.Sequelize = Sequelize;
         db.sequelize = sequelize;
 
-        db.users = require("../models/userModel")(sequelize, DataTypes);
+        // Load models
+        db.batch_documents = require("../models/batchDocumentModel")(sequelize, DataTypes);
+
+        // Sync models with database
+        await sequelize.sync({
+            force: false,
+            alter: true
+        });
 
         // eslint-disable-next-line no-console
         console.log("Database connection has been established successfully.");
-        // await sequelize.sync({ force: false, alter: true });
-
         return { db, sequelize };
     } catch (error) {
         // eslint-disable-next-line no-console

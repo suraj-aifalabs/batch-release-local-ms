@@ -7,5 +7,4 @@ router.get("/ready", readyCheck);
 router.get("/", serverCheck);
 
 
-
 module.exports = router;

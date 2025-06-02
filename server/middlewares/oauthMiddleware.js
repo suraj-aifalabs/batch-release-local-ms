@@ -57,7 +57,7 @@ module.exports.validateOauthToken = (req, res, next) => {
                 const mock_roles = process.env.MOCK_ROLE ? process.env.MOCK_ROLE : "";
 
                 const userDetails = {
-                    name: decoded?.name?.replace(/\s*\[.*?\]\s*/g, "").trim() ?? "",
+                    name: decoded?.name?.trim() ?? "",
                     email: decoded?.preferred_username ?? "",
                     userId: decoded?.oid ?? "",
                     username: decoded?.preferred_username.split("@")[0] ?? "",
