@@ -1,15 +1,111 @@
-/* eslint-disable no-undef */
-const catchAsyncError = require("../middlewares/catchAsyncError");
+const { PDFDocument, StandardFonts } = require("pdf-lib");
 const fs = require("fs");
 const path = require("path");
+const { generateSignedURL, uploadFileToS3, getFileFromS3 } = require("../utils/awsS3Utils");
+const catchAsyncError = require("../middlewares/catchAsyncError");
+const { db } = require("../config/db");
+const { sanitizeInput } = require("../utils/sanitizeRules");
+// eslint-disable-next-line no-undef
 const template = path.join(__dirname, "../../assets/TV-FRM-58719.pdf");
-const { PDFDocument, StandardFonts } = require("pdf-lib");
+// eslint-disable-next-line no-undef
 const Tick_Image = path.join(__dirname, "../../assets/Tick_Image.png");
 
+exports.uploadFile = catchAsyncError(async (req, res) => {
+    const file = req?.file;
+    const byte = 1048576;
 
-exports.getPDF = catchAsyncError(async (req, res) => {
+    if (!file) {
+        return res.status(400).json({
+            success: false,
+            message: "Please attach a file"
+        });
+    }
+
+    const limit = file?.size / byte;
+
+    if (limit > 50) {
+        return res.status(400).json({
+            success: false,
+            message: "Supported file size is 50MB"
+        });
+    }
+
+    const resObj = await generateSignedURL(file);
+
+    if (!resObj?.signedURL) {
+        return res.status(500).json({
+            success: false,
+            message: "Error generating URL for S3 upload"
+        });
+    }
+    const fileBuffer = await fs.promises.readFile(file.path);
+
+    const responseData = await uploadFileToS3(resObj?.signedURL, fileBuffer);
+
+    if (responseData.status !== 200) {
+        return res.status(500).json({
+            success: false,
+            message: "Error Uploading File to S3"
+        });
+    }
+
+    const fileObj = {
+        file_name: resObj?.filename ?? file?.originalname,
+        file_size: file?.size,
+        file_type: file.mimetype,
+        batch_number: "123",
+        s3_location: "123",
+        uploaded_by: "system",
+    };
+
+    await db.batch_documents.create(fileObj);
+
+    // remove file once uploaded 
+    const filePath = `${file.destination}/${file?.filename}`;
+    await fs.promises.unlink(filePath);
+
+    res.status(200).json({
+        success: true,
+        message: "Document uploaded successfully",
+        file_name: fileObj?.file_name,
+        file_type: fileObj?.file_type
+    });
+});
+
+exports.getFile = catchAsyncError(async (req, res) => {
+    const reqbody = sanitizeInput(req.method === "GET" ? req.query : req.body);
+
+    const filename = reqbody?.file_name;
+    if (!filename) {
+        return res.status(400).json({
+            success: false,
+            message: "Please provide a file name (ex: example_image.png)"
+        });
+    }
+
+    const resObj = await getFileFromS3(filename);
+    if (!resObj) {
+        return res.status(400).json({
+            success: false,
+            message: "Error generating URL for file"
+        });
+    }
+
+    return res.status(200).json({
+        success: true,
+        message: "File retrieved successfully",
+        url: resObj
+    });
+});
+
+exports.getBatchCertificate = catchAsyncError(async (req, res) => {
     try {
-        const { username, email, exception } = req.body;
+        const username = req.user?.username ?? "system";
+        const fullName = req.user?.name ?? "system";
+        const email = req.user?.email ?? "example@email.com";
+        const exception = req.body?.exception ?? false;
+        const sign = req.body?.sign ?? false;
+
         const existingPdfBytes = await fs.promises.readFile(template);
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -18,6 +114,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
         const { height } = firstPage.getSize();
         const checkmarkBytes = await fs.promises.readFile(Tick_Image);
         const checkmarkImage = await pdfDoc.embedPng(checkmarkBytes);
+        let text = "";
         const data = {
             "_id": "670cb671eb96e6534cd889da",
             "stage": "ATLAS",
@@ -28,7 +125,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
             "patientWeight": "78",
             "cquenceDIN": "DIN00777",
             "cquenceOrderId": "ORD15",
-            "country": "IN",
+            "country": "US",
             "coicBagId": "COIC883",
             "batchNumber": "B114AF",
             "createdAt": "2024-10-14T06:13:05.105Z",
@@ -48,13 +145,13 @@ exports.getPDF = catchAsyncError(async (req, res) => {
             { key: "patientDOB", x: 210, y: 205 },
             { key: "cquenceDIN", x: 210, y: 222 },
             { key: "cquenceOrderId", x: 210, y: 239 },
-            { key: "patientWeight", x: 210, y: 255 },
+            { key: "patientWeight", x: 210, y: 257 },
             { key: "batchNumber", x: 100, y: 315 },
             { key: "coicBagId", x: 215, y: 315 },
             { key: "totalVolume", x: 350, y: 315 },
             { key: "productDose", x: 450, y: 315 },
             { key: "expirationDate", x: 210, y: 335 },
-            { key: "productNDC", x: 210, y: 365 },
+            { key: "productNDC", x: 210, y: 366 },
             { key: "pccNumber", x: 210, y: 382 },
             { key: "nameAndAddress", x: 210, y: 420 },
             { key: "marketAuthorizationNumber", x: 210, y: 435 },
@@ -66,7 +163,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
             { key: "signedBy", x: 350, y: 675 }
         ];
         points.forEach(({ key, x, y }) => {
-            if (key === "username") {
+            if (key === "username" && sign) {
                 if (username) {
                     firstPage.drawText(username, {
                         x,
@@ -77,7 +174,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                 }
             }
             else if (key === "exception") {
-                if (exception === "true") {
+                if (exception === true) {
 
                     firstPage.drawImage(checkmarkImage, {
                         x,
@@ -86,7 +183,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                         height: 10
                     });
                 }
-                else if (exception === "false") {
+                else if (exception === false) {
 
                     firstPage.drawImage(checkmarkImage, {
                         x,
@@ -96,9 +193,9 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                     });
                 }
             }
-            else if (key === "signedBy") {
+            else if (key === "signedBy" && sign) {
                 if (username) {
-                    text = "Digitally signed by " + username + "(9821)";
+                    text = "Digitally signed by " + fullName.split(" [")[0] + " (WWID)";
                     firstPage.drawText(text, {
                         x,
                         y: height - y,
@@ -107,7 +204,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                     });
                 }
             }
-            else if (key === "email") {
+            else if (key === "email" && sign) {
                 if (email) {
                     text = email;
                     firstPage.drawText(text, {
@@ -118,7 +215,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
                     });
                 }
             }
-            else if (key === "signedAt") {
+            else if (key === "signedAt" && sign) {
                 if (username) {
                     const date = new Date();
 
@@ -177,6 +274,7 @@ exports.getPDF = catchAsyncError(async (req, res) => {
 
         const pdfBytes = await pdfDoc.save();
         res.setHeader("Content-Type", "application/pdf");
+        // eslint-disable-next-line no-undef
         res.send(Buffer.from(pdfBytes));
     }
     catch (err) {
