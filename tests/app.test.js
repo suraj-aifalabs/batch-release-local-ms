@@ -3,7 +3,6 @@
 const request = require('supertest');
 const express = require('express');
 
-// Don't mock express itself, only external dependencies
 jest.mock('cors');
 jest.mock('dotenv');
 jest.mock('morgan');
@@ -16,7 +15,6 @@ jest.mock('../server/routes/batchRoutes');
 jest.mock('../server/middlewares/ErrorHandler');
 jest.mock('../server/middlewares/oauthMiddleware');
 
-// Mock implementations
 const cors = require('cors');
 const dotenv = require('dotenv');
 const logger = require('morgan');
@@ -83,8 +81,7 @@ describe('Express Application Tests', () => {
 
     describe('Application Configuration', () => {
         test('should configure dotenv', () => {
-            // Import app to trigger configuration
-            require('./app'); // Adjust path as needed
+            require('./app');
 
             expect(dotenv.config).toHaveBeenCalled();
         });
@@ -98,7 +95,6 @@ describe('Express Application Tests', () => {
         test('should configure express middleware in correct order', () => {
             const app = require('./app');
 
-            // Verify middleware setup calls
             expect(bodyParser.json).toHaveBeenCalled();
             expect(bodyParser.urlencoded).toHaveBeenCalledWith({ extended: true });
             expect(helmet).toHaveBeenCalled();
@@ -156,11 +152,9 @@ describe('Express Application Tests', () => {
         test('should mount auth routes with OAuth middleware', () => {
             const app = express();
 
-            // Mock the router mounting (this is conceptual - actual testing would need app instance)
             const mockUse = jest.spyOn(app, 'use');
 
-            // This would test if routes are mounted correctly
-            // In practice, you'd test this through actual HTTP requests
+
         });
     });
 
@@ -212,26 +206,20 @@ describe('Express Application Tests', () => {
         test('should use ErrorHandler middleware', () => {
             const app = require('../server/app');
 
-            // Verify ErrorHandler is configured
-            // This would be tested through actual error scenarios
         });
     });
 });
 
-// Integration tests with actual Express app
 describe('Express Application Integration Tests', () => {
     let app;
 
     beforeAll(() => {
-        // Create a test version of the app without starting the server
         app = express();
 
-        // Configure middleware
         app.use(express.json());
         app.use(bodyParser.json());
         app.use(bodyParser.urlencoded({ extended: true }));
 
-        // Add test routes to simulate actual behavior
         app.get('/api/auth/test', validateOauthToken, (req, res) => {
             res.json({ message: 'auth route success' });
         });
@@ -369,13 +357,11 @@ describe('Application Performance Tests', () => {
         const responses = await Promise.all(requests);
         const endTime = Date.now();
 
-        // All requests should succeed
         responses.forEach(response => {
             expect(response.status).toBe(200);
             expect(response.body).toHaveProperty('timestamp');
         });
 
-        // Should complete within reasonable time (adjust as needed)
         expect(endTime - startTime).toBeLessThan(5000);
     });
 
@@ -417,8 +403,7 @@ describe('Application Security Tests', () => {
             .get('/security-test')
             .expect(200);
 
-        // These would be set by helmet middleware
-        // Adjust based on your helmet configuration
+
         expect(response.headers).toBeDefined();
     });
 
@@ -430,7 +415,6 @@ describe('Application Security Tests', () => {
             res.json({ received: req.body });
         });
 
-        // Test XSS attempt
         const maliciousPayload = {
             script: '<script>alert("xss")</script>'
         };
@@ -440,8 +424,7 @@ describe('Application Security Tests', () => {
             .send(maliciousPayload)
             .expect(200);
 
-        // The payload should be received as-is (Express doesn't sanitize by default)
-        // Add your own sanitization logic and test accordingly
+
         expect(response.body.received).toEqual(maliciousPayload);
     });
 });

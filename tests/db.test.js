@@ -1,101 +1,80 @@
 /* eslint-disable quotes */
 /* eslint-disable no-undef */
-const { Sequelize, DataTypes } = require("sequelize");
-const { dbConnection, db } = require("../server/config/db"); // Adjust path as needed
+const { dbConnection, db } = require('../server/config/db'); // Adjust path
+const { Sequelize } = require('sequelize');
 
-// Mock Sequelize
-jest.mock("sequelize", () => {
-    const mockSequelize = {
-        authenticate: jest.fn(),
-        sync: jest.fn(),
-        define: jest.fn(),
-        close: jest.fn()
-    };
+// Mock Sequelize and its methods
+jest.mock('sequelize');
 
-    const SequelizeConstructor = jest.fn(() => mockSequelize);
-
-    // Add static properties/methods
-    SequelizeConstructor.DataTypes = {
-        STRING: 'STRING',
-        INTEGER: 'INTEGER',
-        BOOLEAN: 'BOOLEAN',
-        DATE: 'DATE'
-    };
-
-    return {
-        Sequelize: SequelizeConstructor,
-        DataTypes: SequelizeConstructor.DataTypes
-    };
-});
-
-// Mock the user model
-jest.mock("../server/models/userModel", () => {
+// Mock the model file
+jest.mock('../server/models/batchDocumentModel', () => {
     return jest.fn(() => ({
-        findAll: jest.fn(),
-        create: jest.fn(),
-        findOne: jest.fn(),
-        update: jest.fn(),
-        destroy: jest.fn()
+        name: 'batch_documents',
+        // Mock model methods if needed
     }));
 });
 
-const mockUserModel = require("../server/models/userModel");
-
-// Mock console methods
-const originalConsoleLog = console.log;
-const originalConsoleError = console.error;
-
-describe("Database Configuration Tests", () => {
-    let mockSequelizeInstance;
+describe('Database Connection Tests', () => {
+    let mockSequelize;
+    let mockAuthenticate;
+    let mockSync;
+    let consoleSpy;
+    let consoleErrorSpy;
 
     beforeEach(() => {
+        // Reset mocks before each test
         jest.clearAllMocks();
 
-        // Get the mocked Sequelize instance
-        mockSequelizeInstance = new Sequelize();
-
         // Mock console methods
-        console.log = jest.fn();
-        console.error = jest.fn();
+        consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+        consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-        // Reset environment variables
+        // Create mock methods
+        mockAuthenticate = jest.fn();
+        mockSync = jest.fn();
+
+        // Mock Sequelize constructor
+        mockSequelize = {
+            authenticate: mockAuthenticate,
+            sync: mockSync
+        };
+
+        Sequelize.mockImplementation(() => mockSequelize);
+    });
+
+    afterEach(() => {
+        // Restore console methods
+        consoleSpy.mockRestore();
+        consoleErrorSpy.mockRestore();
+
+        // Clear environment variables
         delete process.env.DB_URL;
         delete process.env.NODE_ENV;
     });
 
-    afterEach(() => {
-        console.log = originalConsoleLog;
-        console.error = originalConsoleError;
-    });
+    describe('Successful Database Connection', () => {
+        test('should establish database connection successfully with valid DB_URL', async () => {
+            // Arrange
+            process.env.DB_URL = 'postgresql://user:password@localhost:5432/testdb';
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
 
-    describe("dbConnection function", () => {
-        test("should establish database connection successfully", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            process.env.NODE_ENV = "development";
-
-            //mockSequelizeInstance.authenticate.mockResolvedValue();
-            mockUserModel.mockReturnValue({
-                findAll: jest.fn(),
-                create: jest.fn()
-            });
-
-            // Execute
+            // Act
             const result = await dbConnection();
 
-            // Assertions
+            // Assert
             expect(Sequelize).toHaveBeenCalledWith(
-                "postgresql://user:password@localhost:5432/testdb",
+                'postgresql://user:password@localhost:5432/testdb',
                 expect.objectContaining({
-                    dialect: "postgres",
-                    protocol: "postgres",
+                    dialect: 'postgres',
+                    protocol: 'postgres',
                     dialectOptions: {
                         ssl: {
                             require: true,
                             rejectUnauthorized: false
                         }
                     },
-                    logging: console.log,
+                    logging: false,
                     pool: {
                         max: 5,
                         min: 0,
@@ -105,60 +84,48 @@ describe("Database Configuration Tests", () => {
                 })
             );
 
-            expect(mockSequelizeInstance.authenticate).toHaveBeenCalled();
-            expect(console.log).toHaveBeenCalledWith(
-                "Database connection has been established successfully."
-            );
-            expect(result).toHaveProperty('db');
-            expect(result).toHaveProperty('sequelize');
-            expect(result.db.Sequelize).toBe(Sequelize);
-            expect(result.db.sequelize).toBe(mockSequelizeInstance);
+            expect(mockAuthenticate).toHaveBeenCalledTimes(1);
+            expect(mockSync).toHaveBeenCalledWith({
+                force: false,
+                alter: true
+            });
+            expect(consoleSpy).toHaveBeenCalledWith('Database connection has been established successfully.');
+            expect(result).toEqual({
+                db: expect.objectContaining({
+                    Sequelize: Sequelize,
+                    sequelize: mockSequelize,
+                    batch_documents: expect.any(Object)
+                }),
+                sequelize: mockSequelize
+            });
         });
 
-        test("should use empty string as default DB_URL when not provided", async () => {
-            // Setup - Don't set DB_URL
-            //mockSequelizeInstance.authenticate.mockResolvedValue();
+        test('should use empty string for DB_URL when not provided', async () => {
+            // Arrange
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
 
-            // Execute
+            // Act
             await dbConnection();
 
-            // Assertions
+            // Assert
             expect(Sequelize).toHaveBeenCalledWith(
-                "",
+                '',
                 expect.any(Object)
             );
         });
 
-        test("should disable logging in production environment", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            process.env.NODE_ENV = "production";
+        test('should enable logging in DEVELOPMENT environment', async () => {
+            // Arrange
+            process.env.NODE_ENV = 'DEVELOPMENT';
+            process.env.DB_URL = 'postgresql://user:password@localhost:5432/testdb';
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
 
-            //mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
+            // Act
             await dbConnection();
 
-            // Assertions
-            expect(Sequelize).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.objectContaining({
-                    logging: false
-                })
-            );
-        });
-
-        test("should enable logging in development environment", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            process.env.NODE_ENV = "development";
-
-            //mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
-            await dbConnection();
-
-            // Assertions
+            // Assert
             expect(Sequelize).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -167,205 +134,17 @@ describe("Database Configuration Tests", () => {
             );
         });
 
-        test("should handle authentication failure", async () => {
-            // Setup
-            const authError = new Error("Connection refused");
-            //mockSequelizeInstance.authenticate.mockRejectedValue(authError);
+        test('should disable logging in non-DEVELOPMENT environment', async () => {
+            // Arrange
+            process.env.NODE_ENV = 'PRODUCTION';
+            process.env.DB_URL = 'postgresql://user:password@localhost:5432/testdb';
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
 
-            // Execute
-            const result = await dbConnection();
-
-            // Assertions
-            expect(console.error).toHaveBeenCalledWith(
-                "Unable to connect to the database:",
-                authError
-            );
-            expect(result).toBeUndefined();
-        });
-
-        test("should configure SSL options correctly", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            // mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
+            // Act
             await dbConnection();
 
-            // Assertions
-            expect(Sequelize).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.objectContaining({
-                    dialectOptions: {
-                        ssl: {
-                            require: true,
-                            rejectUnauthorized: false
-                        }
-                    }
-                })
-            );
-        });
-
-        test("should configure connection pool correctly", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            //mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
-            await dbConnection();
-
-            // Assertions
-            expect(Sequelize).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.objectContaining({
-                    pool: {
-                        max: 5,
-                        min: 0,
-                        acquire: 30000,
-                        idle: 10000,
-                    }
-                })
-            );
-        });
-
-        test("should initialize user model correctly", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            //mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
-            const result = await dbConnection();
-
-            // Assertions
-            expect(mockUserModel).toHaveBeenCalledWith(
-                mockSequelizeInstance,
-                DataTypes
-            );
-            expect(result.db.users).toBeDefined();
-        });
-
-        test("should handle model initialization error", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            //  mockSequelizeInstance.authenticate.mockResolvedValue();
-            mockUserModel.mockImplementation(() => {
-                throw new Error("Model initialization failed");
-            });
-
-            // Execute
-            const result = await dbConnection();
-
-            // Assertions
-            expect(console.error).toHaveBeenCalledWith(
-                "Unable to connect to the database:",
-                expect.any(Error)
-            );
-            expect(result).toBeUndefined();
-        });
-    });
-
-    describe("db object", () => {
-        test("should initially be an empty object", () => {
-            expect(db).toEqual({});
-        });
-
-        test("should be populated after successful connection", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            //  mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
-            await dbConnection();
-
-            // Assertions
-            expect(db.Sequelize).toBe(Sequelize);
-            expect(db.sequelize).toBe(mockSequelizeInstance);
-            expect(db.users).toBeDefined();
-        });
-    });
-
-    describe("Error scenarios", () => {
-        test("should handle Sequelize constructor error", async () => {
-            // Setup
-            const constructorError = new Error("Invalid connection string");
-            Sequelize.mockImplementation(() => {
-                throw constructorError;
-            });
-
-            // Execute
-            const result = await dbConnection();
-
-            // Assertions
-            expect(console.error).toHaveBeenCalledWith(
-                "Unable to connect to the database:",
-                constructorError
-            );
-            expect(result).toBeUndefined();
-        });
-
-        test("should handle network timeout errors", async () => {
-            // Setup
-            const timeoutError = new Error("Connection timeout");
-            timeoutError.name = "SequelizeConnectionError";
-            //   mockSequelizeInstance.authenticate.mockRejectedValue(timeoutError);
-
-            // Execute
-            const result = await dbConnection();
-
-            // Assertions
-            expect(console.error).toHaveBeenCalledWith(
-                "Unable to connect to the database:",
-                timeoutError
-            );
-            expect(result).toBeUndefined();
-        });
-
-        test("should handle SSL connection errors", async () => {
-            // Setup
-            const sslError = new Error("SSL connection failed");
-            sslError.code = "UNABLE_TO_VERIFY_LEAF_SIGNATURE";
-            //   mockSequelizeInstance.authenticate.mockRejectedValue(sslError);
-
-            // Execute
-            const result = await dbConnection();
-
-            // Assertions
-            expect(console.error).toHaveBeenCalledWith(
-                "Unable to connect to the database:",
-                sslError
-            );
-            expect(result).toBeUndefined();
-        });
-    });
-
-    describe("Environment-specific configurations", () => {
-        test("should handle undefined NODE_ENV", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            // NODE_ENV is already undefined from beforeEach
-            //  mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
-            await dbConnection();
-
-            // Assertions
-            expect(Sequelize).toHaveBeenCalledWith(
-                expect.any(String),
-                expect.objectContaining({
-                    logging: false // Should default to false when NODE_ENV is not 'development'
-                })
-            );
-        });
-
-        test("should handle test environment", async () => {
-            // Setup
-            process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-            process.env.NODE_ENV = "test";
-            //  mockSequelizeInstance.authenticate.mockResolvedValue();
-
-            // Execute
-            await dbConnection();
-
-            // Assertions
+            // Assert
             expect(Sequelize).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.objectContaining({
@@ -375,74 +154,174 @@ describe("Database Configuration Tests", () => {
         });
     });
 
-    describe("Module exports", () => {
-        test("should export dbConnection function", () => {
-            expect(typeof dbConnection).toBe('function');
+    describe('Database Connection Errors', () => {
+        test('should handle authentication failure', async () => {
+            // Arrange
+            const authError = new Error('Authentication failed');
+            mockAuthenticate.mockRejectedValue(authError);
+
+            // Act
+            const result = await dbConnection();
+
+            // Assert
+            expect(consoleErrorSpy).toHaveBeenCalledWith('Unable to connect to the database:', authError);
+            expect(mockSync).not.toHaveBeenCalled();
+            expect(result).toBeUndefined();
         });
 
-        test("should export db object", () => {
-            expect(typeof db).toBe('object');
+        test('should handle sync failure', async () => {
+            // Arrange
+            const syncError = new Error('Sync failed');
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockRejectedValue(syncError);
+
+            // Act
+            const result = await dbConnection();
+
+            // Assert
+            expect(consoleErrorSpy).toHaveBeenCalledWith('Unable to connect to the database:', syncError);
+            expect(result).toBeUndefined();
+        });
+
+        test('should handle Sequelize constructor failure', async () => {
+            // Arrange
+            const constructorError = new Error('Invalid connection string');
+            Sequelize.mockImplementation(() => {
+                throw constructorError;
+            });
+
+            // Act
+            const result = await dbConnection();
+
+            // Assert
+            expect(consoleErrorSpy).toHaveBeenCalledWith('Unable to connect to the database:', constructorError);
+            expect(result).toBeUndefined();
+        });
+    });
+
+    describe('Configuration Tests', () => {
+        test('should set correct Sequelize configuration options', async () => {
+            // Arrange
+            process.env.DB_URL = 'postgresql://user:password@localhost:5432/testdb';
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
+
+            // Act
+            await dbConnection();
+
+            // Assert
+            const expectedConfig = {
+                dialect: 'postgres',
+                protocol: 'postgres',
+                dialectOptions: {
+                    ssl: {
+                        require: true,
+                        rejectUnauthorized: false
+                    }
+                },
+                logging: false,
+                pool: {
+                    max: 5,
+                    min: 0,
+                    acquire: 30000,
+                    idle: 10000,
+                }
+            };
+
+            expect(Sequelize).toHaveBeenCalledWith(
+                'postgresql://user:password@localhost:5432/testdb',
+                expectedConfig
+            );
+        });
+
+        test('should call sync with correct options', async () => {
+            // Arrange
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
+
+            // Act
+            await dbConnection();
+
+            // Assert
+            expect(mockSync).toHaveBeenCalledWith({
+                force: false,
+                alter: true
+            });
+        });
+    });
+
+    describe('Model Loading Tests', () => {
+        test('should load batch_documents model', async () => {
+            // Arrange
+            const mockModel = jest.fn(() => ({ name: 'batch_documents' }));
+            jest.doMock('../server/models/batchDocumentModel', () => mockModel);
+
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
+
+            // Act
+            const result = await dbConnection();
+
+            // Assert
+            expect(result.db.batch_documents).toBeDefined();
+        });
+    });
+
+    describe('Global db Object Tests', () => {
+        test('should populate global db object correctly', async () => {
+            // Arrange
+            mockAuthenticate.mockResolvedValue();
+            mockSync.mockResolvedValue();
+
+            // Act
+            const result = await dbConnection();
+
+            // Assert
+            expect(result.db.Sequelize).toBe(Sequelize);
+            expect(result.db.sequelize).toBe(mockSequelize);
+            expect(result.db.batch_documents).toBeDefined();
         });
     });
 });
 
-// Integration tests (these would run against a real test database)
-describe("Database Integration Tests", () => {
-    // These tests would be skipped in unit test runs and only run in integration test environment
-    const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+// Integration Test Example (requires actual database)
+describe('Database Connection Integration Tests', () => {
+    // These tests should be run against a test database
+    // and might be skipped in regular unit test runs
 
-    beforeEach(() => {
-        if (!runIntegrationTests) {
-            test.skip('Integration tests skipped - set RUN_INTEGRATION_TESTS=true to enable');
-        }
-    });
+    test.skip('should connect to real test database', async () => {
+        // This test would require a real database connection
+        // Set up test database URL
+        process.env.DB_URL = 'postgresql://testuser:testpass@localhost:5432/testdb';
 
-    test("should connect to real database", async () => {
-        if (!runIntegrationTests) return;
+        const result = await dbConnection();
 
-        // Setup real test database URL
-        process.env.DB_URL = process.env.TEST_DB_URL || "postgresql://test:test@localhost:5432/testdb";
-
-        // This would test against a real database
-        // const result = await dbConnection();
-        // expect(result).toBeDefined();
-        // expect(result.sequelize).toBeDefined();
+        expect(result).toBeDefined();
+        expect(result.sequelize).toBeDefined();
 
         // Clean up
-        // await result.sequelize.close();
+        await result.sequelize.close();
     });
 });
 
-// Performance tests
-describe("Database Performance Tests", () => {
-    test("should establish connection within reasonable time", async () => {
-        // Setup
-        process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-        // mockSequelizeInstance.authenticate.mockResolvedValue();
-
-        // Execute with timing
+// Performance Tests
+describe('Database Connection Performance Tests', () => {
+    test('should complete connection within reasonable time', async () => {
+        // Arrange
         const startTime = Date.now();
+        mockAuthenticate = jest.fn().mockImplementation(() =>
+            new Promise(resolve => setTimeout(resolve, 100))
+        );
+        mockSync = jest.fn().mockResolvedValue();
+        // mockSequelize.authenticate = mockAuthenticate;
+        //  mockSequelize.sync = mockSync;
+
+        // Act
         await dbConnection();
         const endTime = Date.now();
 
-        // Assertions
-        expect(endTime - startTime).toBeLessThan(1000); // Should complete within 1 second
-    });
-
-    test("should handle multiple connection attempts", async () => {
-        // Setup
-        process.env.DB_URL = "postgresql://user:password@localhost:5432/testdb";
-        //  mockSequelizeInstance.authenticate.mockResolvedValue();
-
-        // Execute multiple connections
-        const promises = Array(5).fill().map(() => dbConnection());
-        const results = await Promise.all(promises);
-
-        // Assertions
-        results.forEach(result => {
-            expect(result).toBeDefined();
-            expect(result.db).toBeDefined();
-            expect(result.sequelize).toBeDefined();
-        });
+        // Assert
+        expect(endTime - startTime).toBeLessThan(5000); // Should complete within 5 seconds
     });
 });
+

@@ -17,7 +17,6 @@ describe('GET /ready-check', () => {
         expect(response.body).toHaveProperty('timezone', 'America/New_York');
         expect(response.body).toHaveProperty('environment');
 
-        // Ensure time is a valid EST date string
         const estTime = new Date(response.body.time);
         expect(estTime.toString()).not.toBe('Invalid Date');
     });
@@ -40,7 +39,7 @@ describe('GET /', () => {
     });
 });
 
-app.get('/health', healthCheck)
+app.get('/health', healthCheck);
 describe('GET /health', () => {
     it('should return health status with meta data', async () => {
         const response = await request(app).get('/health')

@@ -12,14 +12,12 @@ describe("Async Handler Middleware", () => {
     beforeAll(() => {
         app = express();
 
-        // Example route using the async handler
         app.get("/async-error", asyncHandler(async (req, res) => {
-            // Simulating an error
+
             throw new Error('Async error occurred!');
         }));
 
         app.use((err, req, res, next) => {
-            // Basic error handling middleware
             res.status(500).json({
                 success: false,
                 message: err.message,
