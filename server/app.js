@@ -59,7 +59,7 @@ app.use(cors(corsOptions));
 
 // routes
 app.use("/", healthRoutes);
-app.use("/document", middlewares.noCacheHeaders, documentRoutes);
+app.use("/document", middlewares.noCacheHeaders, middlewares.validateOauthToken, documentRoutes);
 
 // eslint-disable-next-line no-undef
 const PORT = process.env.PORT || 3001;

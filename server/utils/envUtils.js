@@ -78,6 +78,27 @@ const getMSALClientSecret = async () => {
     }
 };
 
+const getApiUsername = async () => {
+    try {
+        // eslint-disable-next-line no-undef
+        const res = await getParam(process.env.SR_API_USERNAME);
+        return res.Parameter.Value;
+    } catch (e) {
+        // eslint-disable-next-line no-console
+        console.log("error getting ssm secret SR_API_USERNAME", e);
+    }
+};
+
+const getApiPassword = async () => {
+    try {
+        // eslint-disable-next-line no-undef
+        const res = await getParam(process.env.SR_API_PASSWORD);
+        return res.Parameter.Value;
+    } catch (e) {
+        // eslint-disable-next-line no-console
+        console.log("error getting ssm secret SR_API_PASSWORD", e);
+    }
+};
 
 module.exports = {
     getDBHost,
@@ -86,5 +107,7 @@ module.exports = {
     getDBName,
     getMSALTenantID,
     getMSALClientID,
-    getMSALClientSecret
+    getMSALClientSecret,
+    getApiUsername,
+    getApiPassword
 };
