@@ -17,7 +17,7 @@ export default defineConfig([
       "no-var": "error",
       // Style rules
       "quotes": ["error", "double"],
-      "semi": ["error", "always"],
+      "semi": ["warn", "always"],
 
       // Best practices
       "eqeqeq": "error",

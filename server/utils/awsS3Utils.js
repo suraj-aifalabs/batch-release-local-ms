@@ -10,13 +10,13 @@ const bucketName = process.env.AWS_BUCKET_NAME;
 
 const s3Client = new S3Client({ region: bucketRegion });
 
-const generateSignedURL = async (orgFile) => {
+const generateSignedURL = async ({ folder = "default_loc", fileName = "", orgFile }) => {
     try {
 
         // const imageId = uuidv4();
         const imageId = "atara";
 
-        const filename = `${orgFile?.originalname?.split(".")[0]}-${imageId}.${orgFile?.originalname?.split(".").pop()}`;
+        const filename = `${folder}/${orgFile?.originalname?.split(".")[0]}-${imageId}-${fileName}.${orgFile?.originalname?.split(".").pop()}`;
 
         const params = {
             Bucket: bucketName,
@@ -68,8 +68,6 @@ const getFileFromS3 = async (key) => {
 
 const listS3Files = async () => {
     try {
-        // eslint-disable-next-line no-console
-        console.log(`Listing objects in bucket: ${bucketName}`, bucketRegion);
 
         let continuationToken;
         let allObjects = [];
@@ -81,8 +79,6 @@ const listS3Files = async () => {
             });
 
             const response = await s3Client.send(command);
-            // eslint-disable-next-line no-console
-            console.log("response", response);
 
             if (response.Contents && response.Contents.length > 0) {
                 allObjects = [...allObjects, ...response.Contents];
@@ -93,8 +89,6 @@ const listS3Files = async () => {
             }
 
             continuationToken = response.NextContinuationToken;
-            // eslint-disable-next-line no-console
-            console.log("continuationToken", continuationToken);
         } while (continuationToken);
         // eslint-disable-next-line no-console
         console.log(`Total objects found: ${allObjects.length}`);
@@ -105,9 +99,43 @@ const listS3Files = async () => {
     }
 };
 
+const listFolderFiles = async ({ folderPrefix = "" }) => {
+    try {
+        let continuationToken;
+        let allObjects = [];
+
+        do {
+            const command = new ListObjectsV2Command({
+                Bucket: bucketName,
+                Prefix: folderPrefix,
+                ContinuationToken: continuationToken,
+            });
+
+            const response = await s3Client.send(command);
+
+            if (response.Contents && response.Contents.length > 0) {
+                allObjects = [...allObjects, ...response.Contents];
+
+                for (const object of response.Contents) {
+                    const signedUrl = await getFileFromS3(object.Key);
+                    object.signedUrl = signedUrl;
+                }
+            }
+
+            continuationToken = response.NextContinuationToken;
+        } while (continuationToken);
+        // eslint-disable-next-line no-console
+        console.log(`Total objects found: ${allObjects.length}`);
+        return allObjects;
+    } catch (error) {
+        console.error("Error listing objects:", error);
+    }
+};
+
 module.exports = {
     listS3Files,
     generateSignedURL,
     uploadFileToS3,
-    getFileFromS3
+    getFileFromS3,
+    listFolderFiles
 };
