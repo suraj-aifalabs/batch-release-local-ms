@@ -6,6 +6,6 @@ module.exports.validateOauthToken = (req, res, next) => {
         name: "Test User",
         roles: ["admin"],
     };
-    req.isActiveSession = true; // pretend session is valid
+    req.isActiveSession = true;
     next();
 };

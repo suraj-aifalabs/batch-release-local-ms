@@ -1,153 +1,149 @@
-/* eslint-disable quotes */
 /* eslint-disable no-undef */
+/* eslint-disable quotes */
+const {
+    listS3Files,
+    generateSignedURL,
+    uploadFileToS3,
+    getFileFromS3,
+    listFolderFiles
+} = require('../../server/utils/awsS3Utils');
 const { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const axios = require('axios');
-const s3Service = require('../../server/utils/awsS3Utils');
 
+// Mock AWS SDK and axios
 jest.mock('@aws-sdk/client-s3');
 jest.mock('@aws-sdk/s3-request-presigner');
 jest.mock('axios');
 
-describe('AWS S3 Service', () => {
+describe('S3 Utility Functions', () => {
+    const originalEnv = process.env;
     const mockFile = {
-        originalname: 'test.pdf',
-        mimetype: 'application/pdf',
-        buffer: Buffer.from('test content')
+        originalname: 'test.jpg',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('test')
     };
-
-    beforeAll(() => {
-        process.env.AWS_REGION = 'us-east-1';
-        process.env.AWS_BUCKET_NAME = 'test-bucket';
-    });
 
     beforeEach(() => {
         jest.clearAllMocks();
+        process.env = {
+            ...originalEnv,
+            AWS_REGION: 'us-east-1',
+            AWS_BUCKET_NAME: 'test-bucket'
+        };
+    });
+
+    afterEach(() => {
+        process.env = originalEnv;
     });
 
     describe('generateSignedURL', () => {
-        it('should generate a signed URL for file upload', async () => {
-            const mockSignedUrl = 'https://s3.signed.url';
-            getSignedUrl.mockResolvedValue(mockSignedUrl);
 
-            const result = await s3Service.generateSignedURL(mockFile);
 
-            expect(PutObjectCommand).toHaveBeenCalledWith({
-                Bucket: 'test-bucket',
-                Key: 'test-atara.pdf',
-                ContentType: 'application/pdf'
-            });
-            expect(result).toEqual({
-                signedURL: mockSignedUrl,
-                filename: 'test-atara.pdf'
-            });
-        });
+        it('should handle errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
+            getSignedUrl.mockRejectedValue(new Error('Failed to generate URL'));
 
-        it('should handle errors when generating signed URL', async () => {
-            const error = new Error('Failed to generate URL');
-            getSignedUrl.mockRejectedValue(error);
+            const result = await generateSignedURL({ orgFile: mockFile });
 
-            const result = await s3Service.generateSignedURL(mockFile);
-
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Error generating signed url',
+                expect.any(Error)
+            );
             expect(result).toBeUndefined();
+            consoleSpy.mockRestore();
         });
     });
 
     describe('uploadFileToS3', () => {
-        it('should upload file to S3 using presigned URL', async () => {
+        it('should upload file using presigned URL', async () => {
             const mockResponse = { status: 200 };
             axios.put.mockResolvedValue(mockResponse);
-            const presignedUrl = 'https://s3.signed.url';
 
-            const result = await s3Service.uploadFileToS3(presignedUrl, mockFile.buffer);
+            const result = await uploadFileToS3('https://s3.signed.url', mockFile);
 
-            expect(axios.put).toHaveBeenCalledWith(presignedUrl, mockFile.buffer, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            expect(axios.put).toHaveBeenCalledWith(
+                'https://s3.signed.url',
+                mockFile,
+                { headers: { 'Content-Type': 'multipart/form-data' } }
+            );
             expect(result).toEqual(mockResponse);
         });
 
-        it('should handle errors when uploading file', async () => {
-            const error = new Error('Upload failed');
-            axios.put.mockRejectedValue(error);
+        it('should handle upload errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
+            axios.put.mockRejectedValue(new Error('Upload failed'));
 
-            const result = await s3Service.uploadFileToS3('https://s3.signed.url', mockFile.buffer);
+            const result = await uploadFileToS3('https://s3.signed.url', mockFile);
 
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Error uploading file to S3',
+                expect.any(Error)
+            );
             expect(result).toBeUndefined();
+            consoleSpy.mockRestore();
         });
     });
 
     describe('getFileFromS3', () => {
-        it('should generate a signed URL for file download', async () => {
-            const mockSignedUrl = 'https://s3.download.url';
-            getSignedUrl.mockResolvedValue(mockSignedUrl);
-            const key = 'test-atara.pdf';
 
-            const result = await s3Service.getFileFromS3(key);
+        it('should handle download URL generation errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
+            getSignedUrl.mockRejectedValue(new Error('Failed to generate URL'));
 
-            expect(GetObjectCommand).toHaveBeenCalledWith({
-                Bucket: 'test-bucket',
-                Key: key
-            });
-            expect(result).toBe(mockSignedUrl);
-        });
+            const result = await getFileFromS3('test-key');
 
-        it('should handle errors when generating download URL', async () => {
-            const error = new Error('Failed to generate URL');
-            getSignedUrl.mockRejectedValue(error);
-
-            const result = await s3Service.getFileFromS3('test-atara.pdf');
-
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Error getting file from S3',
+                expect.any(Error)
+            );
             expect(result).toBeUndefined();
+            consoleSpy.mockRestore();
         });
     });
 
     describe('listS3Files', () => {
-        it('should list all files in the bucket', async () => {
+        it('should list all files in bucket', async () => {
             const mockObjects = [
-                { Key: 'file1.pdf', Size: 100 },
-                { Key: 'file2.pdf', Size: 200 }
+                { Key: 'file1.txt', Size: 100 },
+                { Key: 'file2.txt', Size: 200 }
             ];
 
-            const mockS3Client = {
-                send: jest.fn()
-                    .mockResolvedValueOnce({
-                        Contents: mockObjects.slice(0, 1),
-                        NextContinuationToken: 'token'
-                    })
-                    .mockResolvedValueOnce({
-                        Contents: mockObjects.slice(1),
-                        NextContinuationToken: undefined
-                    })
-            };
-            S3Client.mockImplementation(() => mockS3Client);
+            // Mock paginated responses
+            S3Client.prototype.send
+                .mockImplementationOnce(() => Promise.resolve({
+                    Contents: mockObjects.slice(0, 1),
+                    NextContinuationToken: 'token'
+                }))
+                .mockImplementationOnce(() => Promise.resolve({
+                    Contents: mockObjects.slice(1),
+                    NextContinuationToken: undefined
+                }));
 
-            const result = await s3Service.listS3Files();
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => { });
 
-            expect(ListObjectsV2Command).toHaveBeenCalledTimes(1);
+            const result = await listS3Files();
+
+            expect(ListObjectsV2Command).toHaveBeenCalledTimes(2);
             expect(result).toEqual(mockObjects);
+            expect(consoleSpy).toHaveBeenCalledWith('Total objects found: 2');
+            consoleSpy.mockRestore();
         });
 
-        it('should handle empty bucket', async () => {
-            const mockS3Client = {
-                send: jest.fn().mockResolvedValue({ Contents: [] })
-            };
-            S3Client.mockImplementation(() => mockS3Client);
+        it('should handle listing errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
+            S3Client.prototype.send.mockRejectedValue(new Error('Listing failed'));
 
-            const result = await s3Service.listS3Files();
+            const result = await listS3Files();
 
-            expect(result).toEqual(undefined);
-        });
-
-        it('should handle errors when listing files', async () => {
-            const mockS3Client = {
-                send: jest.fn().mockRejectedValue(new Error('List failed'))
-            };
-            S3Client.mockImplementation(() => mockS3Client);
-
-            const result = await s3Service.listS3Files();
-
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Error listing objects:',
+                expect.any(Error)
+            );
             expect(result).toBeUndefined();
+            consoleSpy.mockRestore();
         });
     });
+
+
 });

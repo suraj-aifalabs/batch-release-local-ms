@@ -1,18 +1,16 @@
 /* eslint-disable quotes */
 /* eslint-disable no-undef */
 // envUtils.test.js
-require("dotenv").config();
-const {
-    getDBHost,
-    getDBUser,
-    getDBPassword,
-    getDBName,
-    getMSALTenantID,
-    getMSALClientID,
-    getMSALClientSecret,
-    getMilestoneClientID,
-    getMilestoneClientSecret
-} = require('../../server/utils/envUtils');
+
+process.env.POSTGRESQL_HOST = 'POSTGRESQL_HOST';
+process.env.POSTGRESQL_DB_USER = 'POSTGRESQL_DB_USER';
+process.env.POSTGRESQL_DB_PASSWORD = 'POSTGRESQL_DB_PASSWORD';
+process.env.POSTGRESQL_DB_NAME = 'POSTGRESQL_DB_NAME';
+process.env.MSAL_TENANT_ID = 'MSAL_TENANT_ID';
+process.env.MSAL_CLIENT_ID = 'MSAL_CLIENT_ID';
+process.env.MSAL_CLIENT_SECRET = 'MSAL_CLIENT_SECRET';
+process.env.SR_API_USERNAME = 'SR_API_USERNAME';
+process.env.SR_API_PASSWORD = 'SR_API_PASSWORD';
 
 jest.mock('../../server/utils/ssm.js', () => ({
     getParam: jest.fn((paramName) => {
@@ -24,24 +22,24 @@ jest.mock('../../server/utils/ssm.js', () => ({
             MSAL_TENANT_ID: { Parameter: { Value: 'tenantId' } },
             MSAL_CLIENT_ID: { Parameter: { Value: 'clientId' } },
             MSAL_CLIENT_SECRET: { Parameter: { Value: 'clientSecret' } },
-            MILESTONE_CLIENT_ID: { Parameter: { Value: 'milestoneClientId' } },
-            MILESTONE_CLIENT_SECRET: { Parameter: { Value: 'milestoneClientSecret' } },
+            SR_API_USERNAME: { Parameter: { Value: 'apiUser' } },
+            SR_API_PASSWORD: { Parameter: { Value: 'apiPass' } },
         };
         return Promise.resolve(params[paramName]);
     }),
 }));
 
-beforeAll(() => {
-    process.env.POSTGRESQL_HOST = 'POSTGRESQL_HOST';
-    process.env.POSTGRESQL_DB_USER = 'POSTGRESQL_DB_USER';
-    process.env.POSTGRESQL_DB_PASSWORD = 'POSTGRESQL_DB_PASSWORD';
-    process.env.POSTGRESQL_DB_NAME = 'POSTGRESQL_DB_NAME';
-    process.env.MSAL_TENANT_ID = 'MSAL_TENANT_ID';
-    process.env.MSAL_CLIENT_ID = 'MSAL_CLIENT_ID';
-    process.env.MSAL_CLIENT_SECRET = 'MSAL_CLIENT_SECRET';
-    process.env.MILESTONE_CLIENT_ID = 'MILESTONE_CLIENT_ID';
-    process.env.MILESTONE_CLIENT_SECRET = 'MILESTONE_CLIENT_SECRET';
-});
+const {
+    getDBHost,
+    getDBUser,
+    getDBPassword,
+    getDBName,
+    getMSALTenantID,
+    getMSALClientID,
+    getMSALClientSecret,
+    getApiUsername,
+    getApiPassword
+} = require('../../server/utils/envUtils');
 
 describe('Environment Variable Fetching Functions', () => {
     test('getDBHost should return the database host', async () => {
@@ -79,13 +77,13 @@ describe('Environment Variable Fetching Functions', () => {
         expect(clientSecret).toBe('clientSecret');
     });
 
-    test('getMilestoneClientID should return the Milestone client ID', async () => {
-        const milestoneClientId = await getMilestoneClientID();
-        expect(milestoneClientId).toBe('milestoneClientId');
+    test('getApiUsername should return the API username', async () => {
+        const username = await getApiUsername();
+        expect(username).toBe('apiUser');
     });
 
-    test('getMilestoneClientSecret should return the Milestone client secret', async () => {
-        const milestoneClientSecret = await getMilestoneClientSecret();
-        expect(milestoneClientSecret).toBe('milestoneClientSecret');
+    test('getApiPassword should return the API password', async () => {
+        const password = await getApiPassword();
+        expect(password).toBe('apiPass');
     });
 });
