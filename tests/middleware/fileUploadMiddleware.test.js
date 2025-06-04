@@ -29,7 +29,7 @@ describe("Multer file upload middleware", () => {
 
     // Clean up dummy file and uploaded file(s)
     afterAll(() => {
-        if (fs.existsSync(testFilePath)) fs.unlinkSync(testFilePath);
+        if (fs.existsSync(testFilePath)) {fs.unlinkSync(testFilePath);}
 
         fs.readdirSync("./uploads").forEach(file => {
             fs.unlinkSync(`./uploads/${file}`);

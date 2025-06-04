@@ -6,11 +6,11 @@ const request = require("supertest");
 const express = require("express");
 const errorHandler = require("../../server/middlewares/ErrorHandler");
 
-// eslint-disable-next-line no-undef
+ 
 describe("Error Handler Middleware", () => {
     let app;
 
-    // eslint-disable-next-line no-undef
+     
     beforeAll(() => {
         app = express();
 
