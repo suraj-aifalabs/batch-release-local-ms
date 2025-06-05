@@ -7,9 +7,9 @@ const { db } = require("../config/db");
 const { sanitizeInput } = require("../utils/sanitizeRules");
 const { postRequest } = require("../services/batchService");
 // eslint-disable-next-line no-undef
-const template = path.join(__dirname, "../../assets/TV-FRM-58719.pdf");
+const template = path.join(__dirname, "../assets/TV-FRM-58719.pdf");
 // eslint-disable-next-line no-undef
-const Tick_Image = path.join(__dirname, "../../assets/Tick_Image.png");
+const Tick_Image = path.join(__dirname, "../assets/Tick_Image.png");
 
 exports.uploadFile = catchAsyncError(async (req, res) => {
     const file = req?.file;
