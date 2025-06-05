@@ -1,11 +1,24 @@
 const { PDFDocument, StandardFonts } = require("pdf-lib");
 const fs = require("fs");
+const path = require("path");
 const { generateSignedURL, uploadFileToS3, getFileFromS3, listFolderFiles } = require("../utils/awsS3Utils");
 const catchAsyncError = require("../middlewares/catchAsyncError");
 const { db } = require("../config/db");
 const { sanitizeInput } = require("../utils/sanitizeRules");
 const { postRequest } = require("../services/batchService");
+// eslint-disable-next-line no-undef
 
+let pathname;
+if (process.env.NODE_ENV === "DEVELOPMENT") {
+    pathname = "server";
+}
+else {
+    pathname = "dist-server";
+}
+// eslint-disable-next-line no-undef
+const template = path.join(process.cwd(), pathname, "assets", "TV-FRM-58719.pdf");
+// eslint-disable-next-line no-undef
+const Tick_Image = path.join(process.cwd(), pathname, "assets", "Tick_Image.png");
 
 exports.uploadFile = catchAsyncError(async (req, res) => {
     const file = req?.file;
@@ -110,13 +123,7 @@ exports.getFile = catchAsyncError(async (req, res) => {
 
 exports.getBatchCertificate = catchAsyncError(async (req, res) => {
     try {
-        let path;
-        if (process.env.NODE_ENV === "DEVELOPMENT") {
-            path = "server";
-        }
-        else {
-            path = "dist-server";
-        }
+
 
         const username = req.user?.username ?? "system";
         const fullName = req.user?.name ?? "system";
@@ -125,13 +132,13 @@ exports.getBatchCertificate = catchAsyncError(async (req, res) => {
         const sign = req.body?.sign ?? false;
         const batchNumber = req.body?.batchNumber ?? false;
 
-        const existingPdfBytes = await fs.promises.readFile(`../batch-release-local-ms/${path}/assets/TV-FRM-58719.pdf`);
+        const existingPdfBytes = await fs.promises.readFile(template);
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const pages = pdfDoc.getPages();
         const firstPage = pages[0];
         const { height } = firstPage.getSize();
-        const checkmarkBytes = await fs.promises.readFile(`../batch-release-local-ms/${path}/assets/Tick_Image.png`);
+        const checkmarkBytes = await fs.promises.readFile(Tick_Image);
         const checkmarkImage = await pdfDoc.embedPng(checkmarkBytes);
         let text = "";
 
