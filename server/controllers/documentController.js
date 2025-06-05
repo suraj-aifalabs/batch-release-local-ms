@@ -7,9 +7,17 @@ const { db } = require("../config/db");
 const { sanitizeInput } = require("../utils/sanitizeRules");
 const { postRequest } = require("../services/batchService");
 // eslint-disable-next-line no-undef
-const template = path.join(__dirname, "../assets/TV-FRM-58719.pdf");
+//const template = path.join(__dirname, "../assets/TV-FRM-58719.pdf");
+// const template = fs.readFileSync("../assets/TV-FRM-58719.pdf");
+// const Tick_Image = fs.readFileSync("../assets/Tick_Image.png");
 // eslint-disable-next-line no-undef
-const Tick_Image = path.join(__dirname, "../assets/Tick_Image.png");
+//const template = path.join(process.cwd(), "server", "assets", "TV-FRM-58719.pdf");
+// eslint-disable-next-line no-undef
+//const Tick_Image = path.join(process.cwd(), "server", "assets", "Tick_Image.png");
+// const template = fs.readFileSync(templatePath);
+// const Tick_Image = fs.readFileSync(tickImagePath);
+// eslint-disable-next-line no-undef
+//const Tick_Image = path.join(__dirname, "../assets/Tick_Image.png");
 
 exports.uploadFile = catchAsyncError(async (req, res) => {
     const file = req?.file;
@@ -86,6 +94,7 @@ exports.uploadFile = catchAsyncError(async (req, res) => {
 });
 
 exports.getFile = catchAsyncError(async (req, res) => {
+
     const reqbody = sanitizeInput(req.method === "GET" ? req.query : req.body);
 
     const filename = reqbody?.file_name;
@@ -113,6 +122,14 @@ exports.getFile = catchAsyncError(async (req, res) => {
 
 exports.getBatchCertificate = catchAsyncError(async (req, res) => {
     try {
+        let path;
+        if (process.env.NODE_ENV === "DEVELOPMENT") {
+            path = "server";
+        }
+        else {
+            path = "dist-server";
+        }
+        console.log("dir", __dirname);
         const username = req.user?.username ?? "system";
         const fullName = req.user?.name ?? "system";
         const email = req.user?.email ?? "";
@@ -120,13 +137,13 @@ exports.getBatchCertificate = catchAsyncError(async (req, res) => {
         const sign = req.body?.sign ?? false;
         const batchNumber = req.body?.batchNumber ?? false;
 
-        const existingPdfBytes = await fs.promises.readFile(template);
+        const existingPdfBytes = await fs.promises.readFile(`../batch-release-local-ms/${path}/assets/TV-FRM-58719.pdf`);
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const pages = pdfDoc.getPages();
         const firstPage = pages[0];
         const { height } = firstPage.getSize();
-        const checkmarkBytes = await fs.promises.readFile(Tick_Image);
+        const checkmarkBytes = await fs.promises.readFile(`../batch-release-local-ms/${path}/assets/Tick_Image.png`);
         const checkmarkImage = await pdfDoc.embedPng(checkmarkBytes);
         let text = "";
 
