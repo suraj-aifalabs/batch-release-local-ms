@@ -1,23 +1,11 @@
 const { PDFDocument, StandardFonts } = require("pdf-lib");
 const fs = require("fs");
-const path = require("path");
 const { generateSignedURL, uploadFileToS3, getFileFromS3, listFolderFiles } = require("../utils/awsS3Utils");
 const catchAsyncError = require("../middlewares/catchAsyncError");
 const { db } = require("../config/db");
 const { sanitizeInput } = require("../utils/sanitizeRules");
 const { postRequest } = require("../services/batchService");
-// eslint-disable-next-line no-undef
-//const template = path.join(__dirname, "../assets/TV-FRM-58719.pdf");
-// const template = fs.readFileSync("../assets/TV-FRM-58719.pdf");
-// const Tick_Image = fs.readFileSync("../assets/Tick_Image.png");
-// eslint-disable-next-line no-undef
-//const template = path.join(process.cwd(), "server", "assets", "TV-FRM-58719.pdf");
-// eslint-disable-next-line no-undef
-//const Tick_Image = path.join(process.cwd(), "server", "assets", "Tick_Image.png");
-// const template = fs.readFileSync(templatePath);
-// const Tick_Image = fs.readFileSync(tickImagePath);
-// eslint-disable-next-line no-undef
-//const Tick_Image = path.join(__dirname, "../assets/Tick_Image.png");
+
 
 exports.uploadFile = catchAsyncError(async (req, res) => {
     const file = req?.file;
@@ -129,7 +117,7 @@ exports.getBatchCertificate = catchAsyncError(async (req, res) => {
         else {
             path = "dist-server";
         }
-        console.log("dir", __dirname);
+
         const username = req.user?.username ?? "system";
         const fullName = req.user?.name ?? "system";
         const email = req.user?.email ?? "";
