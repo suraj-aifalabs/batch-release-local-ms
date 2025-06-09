@@ -1,15 +1,18 @@
 const { PDFDocument, StandardFonts } = require("pdf-lib");
 const fs = require("fs");
-const path = require("path");
 const { generateSignedURL, uploadFileToS3, getFileFromS3, listFolderFiles } = require("../utils/awsS3Utils");
 const catchAsyncError = require("../middlewares/catchAsyncError");
 const { db } = require("../config/db");
 const { sanitizeInput } = require("../utils/sanitizeRules");
 const { postRequest } = require("../services/batchService");
-// eslint-disable-next-line no-undef
-const template = path.join(__dirname, "../../assets/TV-FRM-58719.pdf");
-// eslint-disable-next-line no-undef
-const Tick_Image = path.join(__dirname, "../../assets/Tick_Image.png");
+
+const getFileFromUrl = async (url = "") => {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch file from S3: ${response.statusText}`);
+    }
+    return response.arrayBuffer();
+};
 
 exports.uploadFile = catchAsyncError(async (req, res) => {
     const file = req?.file;
@@ -32,15 +35,20 @@ exports.uploadFile = catchAsyncError(async (req, res) => {
             message: "Supported file size is 50MB"
         });
     }
+
     const fileNameCodes = {
         "Final Product Bag Reconciliation Form": "FPD_FORM",
         "Final Cassette Label Reconciliation Form": "FCLR_FORM",
         "Critical Information from MES": "CI-MES",
+        "Component Used": "COMP",
         "Certificate of Analysis": "COA",
         "CAR-T Change Control List": "CCL",
         "QA Market Release Checklist": "Release_Checklist",
         "Lot Information Sheet": "LOT",
-        "Shipping Authorisation": "SA"
+        "Shipping Authorisation": "SA",
+        "Warehouse Shipping Checklist": "Warehourse_Checklist",
+        "QC": "QC"
+
     };
 
     const resObj = await generateSignedURL({ folder: batch_number, fileName: fileNameCodes[file_name?.trim()], orgFile: file });
@@ -66,9 +74,9 @@ exports.uploadFile = catchAsyncError(async (req, res) => {
         file_name: resObj?.filename ?? file?.originalname,
         file_size: file?.size,
         file_type: file.mimetype,
-        batch_number: "123",
-        s3_location: "123",
-        uploaded_by: "system",
+        batch_number: batch_number,
+        s3_location: `${batch_number}/${file_name}`,
+        uploaded_by: req?.user?.username ?? "system",
     };
 
     await db.batch_documents.create(fileObj);
@@ -113,6 +121,25 @@ exports.getFile = catchAsyncError(async (req, res) => {
 
 exports.getBatchCertificate = catchAsyncError(async (req, res) => {
     try {
+
+        // const pathname = process.env.NODE_ENV === "LOCAL" ? "server" : "dist-server";
+
+        // const template = path.join(process.cwd(), pathname, "assets", "TV-FRM-58719.pdf");
+
+
+        // const Tick_Image = path.join(process.cwd(), pathname, "assets", "Tick_Image.png");
+
+
+        const templateUrl = await getFileFromS3("Cert_Template/TV-FRM-58719-atara-QC.pdf");
+        const tickImageUrl = await getFileFromS3("Cert_Template/Tick_Image-atara-QC.png");
+
+        // Fetch files from S3
+        const [templateBytes, tickImageBytes] = await Promise.all([
+            getFileFromUrl(templateUrl),
+            getFileFromUrl(tickImageUrl),
+
+        ]);
+
         const username = req.user?.username ?? "system";
         const fullName = req.user?.name ?? "system";
         const email = req.user?.email ?? "";
@@ -120,17 +147,17 @@ exports.getBatchCertificate = catchAsyncError(async (req, res) => {
         const sign = req.body?.sign ?? false;
         const batchNumber = req.body?.batchNumber ?? false;
 
-        const existingPdfBytes = await fs.promises.readFile(template);
-        const pdfDoc = await PDFDocument.load(existingPdfBytes);
+        // const existingPdfBytes = await fs.promises.readFile(template);
+        const pdfDoc = await PDFDocument.load(templateBytes);
         const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const pages = pdfDoc.getPages();
         const firstPage = pages[0];
         const { height } = firstPage.getSize();
-        const checkmarkBytes = await fs.promises.readFile(Tick_Image);
-        const checkmarkImage = await pdfDoc.embedPng(checkmarkBytes);
+        // const checkmarkBytes = await fs.promises.readFile(Tick_Image);
+        const checkmarkImage = await pdfDoc.embedPng(tickImageBytes);
         let text = "";
 
-        const b_no = batchNumber && batchNumber !== "" ? batchNumber : "23HC3478";
+        const b_no = batchNumber !== "" ? batchNumber : "23HC3478";
         const realBatchInfo = await postRequest("/service/get_batch", { batch_number: b_no });
         const data = realBatchInfo?.data ?? {};
 
@@ -296,4 +323,39 @@ exports.getBatchDocuments = catchAsyncError(async (req, res) => {
         message: "Batch documents",
         documents: docs_data ?? []
     });
+});
+
+exports.getFileAndSendResponse = catchAsyncError(async (req, res) => {
+    try {
+        const reqbody = sanitizeInput(req.method === "GET" ? req.query : req.body);
+        const { fileKey } = reqbody;
+
+        const binaryRes = await getFileFromS3(fileKey);
+
+        if (binaryRes) {
+            const fileName = fileKey.split("/").pop();
+            res.setHeader("Content-Type", "application/octet-stream");
+            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+            binaryRes.pipe(res).on("error", (error) => {
+                console.error("Stream Error:", error);
+                res.status(500).json({
+                    flag: "error",
+                    error: error.message,
+                    message: "fail",
+                });
+            });
+        } else {
+            res.status(200).json({
+                flag: "error",
+                message: "No File Found",
+            });
+        }
+
+    } catch (error) {
+        res.status(500).json({
+            flag: "error",
+            error: error.message,
+            message: "success",
+        });
+    }
 });

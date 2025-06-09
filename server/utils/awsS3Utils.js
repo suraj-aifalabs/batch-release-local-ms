@@ -55,9 +55,16 @@ const getFileFromS3 = async (key) => {
         const params = {
             Bucket: bucketName,
             Key: key,
+            ResponseContentDisposition: "inline"
         };
 
         const command = new GetObjectCommand(params);
+
+        // const response = await s3Client.send(command);
+
+        // console.log("response from s3", response);
+        // return response?.Body;
+
         return await getSignedUrl(s3Client, command, { expiresIn: 60 * 10 });
     }
     catch (err) {
