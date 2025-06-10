@@ -235,6 +235,35 @@ describe("Document Controller Tests", () => {
                 mockFs.promises.unlink.mockReset();
             }
         });
+        test("should return error when file size exceeds 50MB", async () => {
+            req.file = {
+                ...mockFile,
+                size: 52428801 // Just over 50MB
+            };
+
+            mockSanitize.sanitizeInput.mockReturnValue({
+                batch_number: "BATCH123",
+                file_name: "Final Product Bag Reconciliation Form"
+            });
+
+            await uploadFile(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({
+                success: false,
+                message: "Supported file size is 50MB"
+            });
+        });
+        test("should return 500 if PDF processing throws error", async () => {
+            mockPDFLib.PDFDocument.load.mockRejectedValue(new Error("PDF error"));
+
+            await getBatchCertificate(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+            expect(res.json).toHaveBeenCalledWith({
+                error: "Failed to parse URL from "
+            });
+        });
     });
 
     describe("getFile", () => {
@@ -322,20 +351,6 @@ describe("Document Controller Tests", () => {
             });
         });
 
-        // test("should generate batch certificate successfully", async () => {
-        //     await getBatchCertificate(req, res);
-
-        //     expect(mockFs.promises.readFile).toHaveBeenCalledTimes(2);
-        //     expect(mockPDFLib.PDFDocument.load).toHaveBeenCalled();
-        //     expect(mockPdfDoc.embedFont).toHaveBeenCalledWith("Helvetica");
-        //     expect(mockPdfDoc.embedPng).toHaveBeenCalled();
-        //     // expect(mockBatchService.postRequest).toHaveBeenCalledWith("/service/get_batch", {
-        //     //     batch_number: "23HC3478"
-        //     // });
-        //     expect(mockPage.drawText).toHaveBeenCalled();
-        //     expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "application/pdf");
-        //     expect(res.send).toHaveBeenCalledWith(Buffer.from("generated pdf"));
-        // });
 
         test("should use default batch number when not provided", async () => {
             req.body.batchNumber = "";
@@ -344,18 +359,7 @@ describe("Document Controller Tests", () => {
 
         });
 
-        // test("should handle exception checkbox correctly", async () => {
-        //     req.body.exception = true;
 
-        //     await getBatchCertificate(req, res);
-
-        //     expect(mockPage.drawImage).toHaveBeenCalledWith("checkmark", {
-        //         x: 419,
-        //         y: 800 - 647,
-        //         width: 10,
-        //         height: 10
-        //     });
-        // });
 
 
     });
@@ -438,4 +442,79 @@ describe("Test Utilities", () => {
     });
 
 
+
+});
+
+describe("getFileAndSendResponse", () => {
+    const { getFileAndSendResponse } = require("../../server/controllers/documentController");
+    let req, res;
+    beforeEach(() => {
+        // Initialize req and res objects before each test
+        req = {
+            body: {},
+            params: {},
+            query: {}
+        };
+
+        res = {
+            setHeader: jest.fn(),
+            status: jest.fn().mockReturnThis(),
+            json: jest.fn(),
+            send: jest.fn(),
+            pipe: jest.fn()
+        };
+    });
+    test("should stream file from S3 when file exists", async () => {
+        const mockStream = {
+            pipe: jest.fn().mockReturnThis(),
+            on: jest.fn()
+        };
+        mockSanitize.sanitizeInput.mockReturnValue({ fileKey: "batch1/file1.pdf" });
+        mockAwsUtils.getFileFromS3.mockResolvedValue(mockStream);
+
+        req.body = { fileKey: "batch1/file1.pdf" };
+
+        await getFileAndSendResponse(req, res);
+
+        expect(mockAwsUtils.getFileFromS3).toHaveBeenCalledWith("batch1/file1.pdf");
+        expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "application/octet-stream");
+        expect(res.setHeader).toHaveBeenCalledWith("Content-Disposition", expect.stringContaining("file1.pdf"));
+        expect(mockStream.pipe).toHaveBeenCalledWith(res);
+    });
+
+    test("should respond with 'No File Found' if getFileFromS3 returns null", async () => {
+        mockSanitize.sanitizeInput.mockReturnValue({ fileKey: "nonexistent.pdf" });
+        mockAwsUtils.getFileFromS3.mockResolvedValue(null);
+
+        await getFileAndSendResponse(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith({
+            flag: "error",
+            message: "No File Found"
+        });
+    });
+
+    test("should catch stream error and respond with error message", async () => {
+        const mockStream = {
+            pipe: () => ({
+                on: (event, handler) => {
+                    if (event === "error") {
+                        handler(new Error("Stream failed"));
+                    }
+                }
+            })
+        };
+
+        mockSanitize.sanitizeInput.mockReturnValue({ fileKey: "batch1/fail.pdf" });
+        mockAwsUtils.getFileFromS3.mockResolvedValue(mockStream);
+
+        await getFileAndSendResponse(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            flag: "error",
+            error: "Stream failed"
+        }));
+    });
 });
